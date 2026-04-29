@@ -67,8 +67,8 @@ def Score_Board():
 
 def winCheck(Piece_Number, Piece_Colour, board):
     if rowCheck(Piece_Number, board) or rowCheck(Piece_Number, transpose(board)) or rowCheck(Piece_Number, transposeDiagonalInc(board)) or rowCheck(Piece_Number, transposeDiagonalDec(board)):
-        Winner = Piece_Colour
-        return Winner
+        return Piece_Colour
+    return None
 
 def rowCheck(Piece_Number, board):
     for i in range(len(board)):
@@ -224,6 +224,7 @@ Turn_Text = Score_Board()
 
 #Game Code
 while Winner == None:
+    
     s.update()
 
     X = Click_Cord[0]
@@ -238,15 +239,15 @@ while Winner == None:
         create_circle(Board_X1 + Board_GapX * (X - 1), Board_Y1 + Board_GapY * (Y - 1), radius = Chess_Radius, fill = Turn)
 
         if Turn_Num % 2 == 1:
-            White_Cord_PickedX.append(X)
-            White_Cord_PickedY.append(Y)
-            board[Y - 1][X - 1] = 2
+            Black_Cord_PickedX.append(X)
+            Black_Cord_PickedY.append(Y)
+            board[Y - 1][X - 1] = Black_Piece
             Turn = "white"
 
         elif Turn_Num % 2 == 0:
-            Black_Cord_PickedX.append(X)
-            Black_Cord_PickedY.append(Y)
-            board[Y - 1][X - 1] = 1
+            White_Cord_PickedX.append(X)
+            White_Cord_PickedY.append(Y)
+            board[Y - 1][X - 1] = White_Piece
             Turn = "black"
 
         Turn_Text = Score_Board()
@@ -267,11 +268,16 @@ s.delete(Turn_Text)
 
 if Winner != "Exit":
     Score_Board()
-
-
+    s.update()
+myInterface.mainloop()
 """
 수정사항
 백시작을 흑시작으로 수정해둠
+-김도훈
+흑턴에 화이트리스트에 저장해두는거 수정
+백턴에 블랙리스트에 저장해두는거 수정
+승자가 누구인지 게임 마지막에 텍스트로 안뜨는거 수정
+게임 x버튼으로 종료하고 나서도 디버거가 계속 돌아가는거 수정
 """
 
     
