@@ -41,25 +41,23 @@ def draw_forbidden_marks():
 
 def is_forbidden(x, y, board):
     # 임시로 돌을 놓아보기
-    board[y-1][x-1] = Black_Piece
-    
-    open3 = count_open3(x, y, board)
-    four  = count_four(x, y, board)
-    six   = check_overline(x, y, board)
-    
-    # 임시 돌 제거
-    board[y-1][x-1] = 0
-    
-    if six:             # 장목 금지
-        return True
-    if open3 >= 2:      # 3-3 금지
-        return True
-    if four >= 2:       # 4-4 금지
-        return True
-    
+    if Location_Validation():
+        board[y-1][x-1] = Black_Piece 
+        open3 = count_open3(x, y, board)
+        four  = count_four(x, y, board)
+        six   = check_overline(x, y, board)
+        # 임시 돌 제거
+        board[y-1][x-1] = 0
+        if six:             # 장목 금지
+            return True
+        if open3 >= 2:      # 3-3 금지
+            return True
+        if four >= 2:       # 4-4 금지
+            return True
     return False
 
 def count_in_direction(x, y, dx, dy, board, piece):
+    # 길이 측정
     count = 0
     nx, ny = x + dx, y + dy
     while 0 < nx <= Board_Size+1 and 0 < ny <= Board_Size+1 and board[ny-1][nx-1] == piece:
@@ -69,6 +67,7 @@ def count_in_direction(x, y, dx, dy, board, piece):
     return count
 
 def check_overline(x, y, board):
+    # 6목 금지 
     directions = [(1,0),(0,1),(1,1),(1,-1)]
     for dx, dy in directions:
         count = 1
@@ -79,6 +78,7 @@ def check_overline(x, y, board):
     return False
 
 def count_four(x, y, board):
+    # 4-4 금지
     directions = [(1,0),(0,1),(1,1),(1,-1)]
     fours = 0
     for dx, dy in directions:
@@ -90,6 +90,7 @@ def count_four(x, y, board):
     return fours
 
 def count_open3(x, y, board):
+    # 안 막힌 3-3 금지
     directions = [(1,0),(0,1),(1,1),(1,-1)]
     open3s = 0
     for dx, dy in directions:
@@ -113,6 +114,7 @@ def count_open3(x, y, board):
     return open3s
 
 def create_circle(x, y, radius, fill = "", outline = "black", width = 1):
+    # 동그라미 그리기
     s.create_oval(x - radius, y - radius, x + radius, y + radius, fill = fill, outline = outline, width = width)
 
 def Value_Check_int(Value):
@@ -124,17 +126,19 @@ def Value_Check_int(Value):
         return "int"
 
 def MouseClick(event):
+    # 클릭 위치 감지
     global Click_Cord
     X_click = event.x
     Y_click = event.y
     Click_Cord = Piece_Location(X_click, Y_click)
-    print(Click_Cord)
+    # print(Click_Cord)
 
 s.bind("<Button-1>", MouseClick)
 
 Click_Cord = [None, None]
 
 def Piece_Location(X_click, Y_click):    
+    # 좌표
     X = None
     Y = None
     for i in range(len(Actual_CordX1)):
@@ -148,7 +152,7 @@ def Piece_Location(X_click, Y_click):
     return X, Y
 
 def Location_Validation():
-
+    # 존재 여부 확인
     if X == None or Y == None:
         return False
         
@@ -157,7 +161,7 @@ def Location_Validation():
 
 
 def Score_Board():
-    
+    # 점수 표시
     if Winner == None:
         Turn_Text = s.create_text(width / 2, height - Frame_Gap + 15, text = "Turn = " + Turn, font = "Helvetica 25 bold", fill = Turn)
         return Turn_Text
@@ -170,6 +174,7 @@ def Score_Board():
                       fill = Winner.lower())
 
 def winCheck(Piece_Number, Piece_Colour, board):
+    # 승리 확인
     if rowCheck(Piece_Number, board) or rowCheck(Piece_Number, transpose(board)) or rowCheck(Piece_Number, transposeDiagonalInc(board)) or rowCheck(Piece_Number, transposeDiagonalDec(board)):
         Winner = Piece_Colour
         return Winner
@@ -236,24 +241,28 @@ def transposeDiagonalInc(loa):
     return lst
 
 def transpose(loa):
+    # 
     lst = []
     for i in range(len(loa)):
         lst.append(getCol(loa, i))
     return lst
     
 def getCol(loa, colNum):
+    # 
     lst = []
     for i in range(len(loa)):
         lst.append(loa[i][colNum])
     return lst
 
 def Index2D_Cord(List, Find):
+    # 정확한 용도를 모르겠음
     for i, x in enumerate(List):
         if Find in x:
             Colour_CordX.append(i - 1)
             Colour_CordY.append(x.index(Find) - 1)
 
 def Exit():
+    # 종료
     global Winner
     Winner = "Exit"
     myInterface.destroy()
@@ -304,8 +313,7 @@ Black_Piece = 2
 White_Piece = 1
 
 #Fills Empty List
-for z in range(1, Board_Size + 2):
-    
+for z in range(1, Board_Size + 2): 
     for i in range(1, Board_Size + 2):
         Game_CordX.append(z)
         Game_CordY.append(i)
@@ -337,7 +345,6 @@ while Winner == None:
 
     if Picked:
         if Turn_Num % 2 == 1 and is_forbidden(X, Y, board):
-            print("금수 자리입니다!")  
             Click_Cord = [None, None]
             continue
         s.delete(Turn_Text)
@@ -384,6 +391,8 @@ if Winner != "Exit":
 백시작을 흑시작으로 수정해둠+턴로직 수정
 score_board 수정
 금수지정추가
+
+
 """
 
     
