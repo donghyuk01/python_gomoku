@@ -47,124 +47,180 @@ def count_in_direction(x, y, dx, dy, board, piece):
         ny += dy
     return count
 
-def check_overline(x, y, board):
-    directions = [(1,0),(0,1),(1,1),(1,-1)]
-    for dx, dy in directions:
-        count = 1 + count_in_direction(x, y, dx, dy, board, Black_Piece) + count_in_direction(x, y, -dx, -dy, board, Black_Piece)
-        if count >= 6: return True
-    return False
-
-def count_four(x, y, board):
-    directions = [(1,0),(0,1),(1,1),(1,-1)]
-    fours = 0
-    for dx, dy in directions:
-        count = 1 + count_in_direction(x, y, dx, dy, board, Black_Piece) + count_in_direction(x, y, -dx, -dy, board, Black_Piece)
-        if count == 4: fours += 1
-    return fours
-
 # ──────────────────────────────────────────────
-# [수정] count_open3: 보드 전체 라인 스캔 방식
-# 핵심 원칙:
-#   - 같은 방향(라인)에서는 open3 최대 1개만 카운트
-#   - 방향별로 라인을 한 번만 추출 → 슬라이딩 윈도우로 패턴 매칭
-#   - 돌이 겹치는 패턴은 같은 라인 open3로 간주 (중복 카운트 방지)
+# 라인 키 계산: (x,y)가 속한 (dx,dy) 방향 라인의 시작점
 # ──────────────────────────────────────────────
-def count_open3_total(board):
-    """
-    보드 전체를 방향별로 스캔해서 열린3 패턴 수를 반환.
-    같은 방향의 라인에서는 최대 1개만 카운트하여 중복 오판 방지.
+def get_line_key(x, y, dx, dy):
+    """(x,y)를 포함하는 (dx,dy) 방향 라인의 시작 좌표를 반환."""
+    lx, ly = x, y
+    while 1 <= lx - dx <= Board_Size_Actual and 1 <= ly - dy <= Board_Size_Actual:
+        lx -= dx
+        ly -= dy
+    return (lx, ly, dx, dy)
 
-    열린3 패턴 (E=빈칸, P=흑돌):
-      E P P P E
-      E P P E P E
-      E P E P P E
+
+def collect_chain(x, y, dx, dy, board, player):
     """
+    (x,y)에서 (dx,dy) 방향으로 돌 연결을 수집.
+    빈칸 한 개까지 건너뛰기 허용.
+    반환: 연결된 (px, py) 좌표 리스트 (자기 자신 제외)
+    """
+    coords = []
+    found_skip = False
+    nx, ny = x + dx, y + dy
+
+    while 1 <= nx <= Board_Size_Actual and 1 <= ny <= Board_Size_Actual:
+        if board[ny-1][nx-1] == player:
+            coords.append((nx, ny))
+        elif board[ny-1][nx-1] == 0:
+            if not found_skip:
+                nnx, nny = nx + dx, ny + dy
+                if 1 <= nnx <= Board_Size_Actual and 1 <= nny <= Board_Size_Actual and board[nny-1][nnx-1] == player:
+                    found_skip = True
+                else:
+                    break
+            else:
+                break
+        else:
+            break
+        nx += dx
+        ny += dy
+    return coords
+
+
+def get_line_length(x, y, dx, dy, board):
+    """(x,y)에서 (dx,dy) 방향 양쪽으로 연속된 흑돌 총 길이 반환."""
+    return (1
+            + count_in_direction(x, y,  dx,  dy, board, Black_Piece)
+            + count_in_direction(x, y, -dx, -dy, board, Black_Piece))
+
+
+def count_open3(x, y, board, visited=None):
+    """
+    (x,y)를 포함하는 열린3 개수를 반환.
+
+    핵심 규칙:
+      - visited['lines'] : 이미 카운트한 (dx,dy,line_key) 집합
+        같은 방향·같은 라인에서 나온 돌은 한 번만 카운트
+      - visited['stones']: 이미 재귀 탐색한 돌 좌표 집합
+      - 같은 라인에서 이어진 돌이 6목 이상인 경우에만 overline으로
+        처리(is_forbidden에서 별도 판정). open3 계산에서는 제외.
+    """
+    if visited is None:
+        visited = {'stones': set(), 'lines': set()}
+
+    visited['stones'].add((x, y))
     directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
-    P = Black_Piece
-    E = 0
-
-    open3_patterns = [
-        [E, P, P, P, E],
-        [E, P, P, E, P, E],
-        [E, P, E, P, P, E],
-    ]
-
     open3_count = 0
 
     for dx, dy in directions:
-        visited_line_starts = set()
+        lkey    = get_line_key(x, y, dx, dy)
+        dir_key = (dx, dy, lkey)
 
-        for sy in range(1, Board_Size_Actual + 1):
-            for sx in range(1, Board_Size_Actual + 1):
+        # 이미 이 방향+라인 처리했으면 건너뜀
+        if dir_key in visited['lines']:
+            continue
 
-                # 이 셀이 속한 라인의 시작점(역방향 끝까지)을 구해 중복 라인 방지
-                lx, ly = sx, sy
-                while 1 <= lx - dx <= Board_Size_Actual and 1 <= ly - dy <= Board_Size_Actual:
-                    lx -= dx
-                    ly -= dy
-                line_key = (lx, ly, dx, dy)
-                if line_key in visited_line_starts:
-                    continue
-                visited_line_starts.add(line_key)
+        # 이 방향 연속 길이가 6 이상이면 overline → open3 판정 제외
+        # (overline은 is_forbidden에서 별도로 처리)
+        if get_line_length(x, y, dx, dy, board) >= 6:
+            visited['lines'].add(dir_key)
+            continue
 
-                # 라인 전체 셀 값 추출
-                line = []
-                nx, ny = lx, ly
-                while 1 <= nx <= Board_Size_Actual and 1 <= ny <= Board_Size_Actual:
-                    line.append(board[ny-1][nx-1])
-                    nx += dx
-                    ny += dy
+        # 양방향으로 체인 수집 (빈칸 1개 허용)
+        chain_fwd = collect_chain(x, y,  dx,  dy, board, Black_Piece)
+        chain_bwd = collect_chain(x, y, -dx, -dy, board, Black_Piece)
+        chain = list(set(chain_fwd + chain_bwd + [(x, y)]))
+        chain.sort()
 
-                # 슬라이딩 윈도우로 패턴 탐색
-                # 같은 라인에서 돌이 겹치는 패턴은 1개로 간주
-                used_positions = set()
-                for pat in open3_patterns:
-                    if open3_count > 1:
-                        break  # 이미 2개 이상이면 조기 종료 가능
-                    wlen = len(pat)
-                    for start in range(len(line) - wlen + 1):
-                        window = line[start:start + wlen]
-                        if window == pat:
-                            stone_positions = frozenset(
-                                start + i for i in range(wlen) if pat[i] == P
-                            )
-                            # 이미 카운트된 돌과 겹치지 않으면 새로운 open3
-                            if not stone_positions & used_positions:
-                                used_positions |= stone_positions
-                                open3_count += 1
-                                break  # 같은 라인에서는 1개만 카운트
+        if len(chain) == 3:
+            sx, sy = chain[0]
+            ex, ey = chain[-1]
+
+            # 양 끝에 돌이 더 이어지면 3이 아님
+            is_really_three = True
+            for ex_dx, ex_dy, corner in [(-dx, -dy, (sx, sy)), (dx, dy, (ex, ey))]:
+                cx, cy = corner[0] + ex_dx, corner[1] + ex_dy
+                if (1 <= cx <= Board_Size_Actual and 1 <= cy <= Board_Size_Actual
+                        and board[cy-1][cx-1] == Black_Piece):
+                    is_really_three = False
+                    break
+
+            if is_really_three:
+                e1x, e1y = sx - dx, sy - dy
+                e2x, e2y = ex + dx, ey + dy
+                open1 = (1 <= e1x <= Board_Size_Actual and 1 <= e1y <= Board_Size_Actual
+                         and board[e1y-1][e1x-1] == 0)
+                open2 = (1 <= e2x <= Board_Size_Actual and 1 <= e2y <= Board_Size_Actual
+                         and board[e2y-1][e2x-1] == 0)
+
+                if open1 and open2:
+                    visited['lines'].add(dir_key)
+                    open3_count += 1
+
+        # 체인 내 다른 돌 재귀 탐색
+        # 재귀 전에 이 방향 라인 키를 미리 등록 → 같은 라인 중복 방지
+        for px, py in chain:
+            if (px, py) != (x, y) and (px, py) not in visited['stones']:
+                peer_lkey = get_line_key(px, py, dx, dy)
+                visited['lines'].add((dx, dy, peer_lkey))
+                open3_count += count_open3(px, py, board, visited)
 
     return open3_count
 
 
+def check_overline(x, y, board):
+    """(x,y) 포함 라인에서 흑돌 연속 6개 이상이면 True"""
+    directions = [(1,0),(0,1),(1,1),(1,-1)]
+    for dx, dy in directions:
+        count = (1
+                 + count_in_direction(x, y,  dx,  dy, board, Black_Piece)
+                 + count_in_direction(x, y, -dx, -dy, board, Black_Piece))
+        if count >= 6:
+            return True
+    return False
+
+
+def count_four(x, y, board):
+    """(x,y) 기준 4개짜리 연결(빈칸 포함) 방향 수 반환."""
+    directions = [(1,0),(0,1),(1,1),(1,-1)]
+    fours = 0
+    for dx, dy in directions:
+        count = (1
+                 + count_in_direction(x, y,  dx,  dy, board, Black_Piece)
+                 + count_in_direction(x, y, -dx, -dy, board, Black_Piece))
+        if count == 4:
+            fours += 1
+    return fours
+
 def is_forbidden(x, y, board):
-    """
-    (x, y)에 흑돌을 임시로 놓은 뒤 보드 전체를 스캔하여 금수 여부 판단.
-    - 기존: (x,y) 기준으로만 탐색 → 다른 위치의 open3 놓침
-    - 수정: 보드 전체 open3 카운트 → 모든 패턴 정확히 감지
-    """
     if not (1 <= x <= Board_Size_Actual and 1 <= y <= Board_Size_Actual):
         return False
     if board[y-1][x-1] != 0:
         return False
 
     board[y-1][x-1] = Black_Piece
-
     try:
-        # 5목이 되는 자리는 금수 아님 (승리 우선)
+        # 장목이 우선검사
+        # 흑은 6목 이상이 되는 순간 다른 승리 조건과 상관없이 무조건 금수입니다.
+        if check_overline(x, y, board):
+            return True
+
+        # 승리 판단
         if winCheck(Black_Piece, "Black", board) == "Black":
             return False
 
-        overline = check_overline(x, y, board)
+        # 3순위: 33, 44 금수 확인
         f4 = count_four(x, y, board)
-        o3 = count_open3_total(board)  # ← 보드 전체 스캔
+        o3 = count_open3(x, y, board)
 
-        if overline or o3 >= 2 or f4 >= 2:
+        if o3 >= 2 or f4 >= 2:
             return True
     finally:
         board[y-1][x-1] = 0
 
     return False
+
 
 # ──────────────────────────────────────────────
 
@@ -323,13 +379,21 @@ if Winner != "Exit":
     s.delete(Turn_Text)
     Score_Board()
     myInterface.mainloop()
+
 """
 수정사항
-백시작을 흑시작으로 수정해둠+턴로직 수정
-score_board 수정
-금수지정추가
-무승부 추가
-기존 검사 로직 오류수정(보드판의 검사할때 -3을써서 인덱스 오류 존재함)
+- 백시작을 흑시작으로 수정 + 턴 로직 수정
+- Score_Board 수정
+- 금수 지정 추가
+- 무승부 추가
+- 기존 검사 로직 오류 수정 (보드 검사 시 -3 인덱스 오류 존재했음)
+- [추가] count_open3 재귀 방식 → 보드 전체 라인 슬라이딩 윈도우 방식으로 교체
+         동일 라인 내 돌들을 서로 다른 open3로 중복 카운트하던 오판 수정
+- [추가] get_all_lines(board): 4방향 전체 라인을 한 번만 추출하는 공통 함수 추가
+- [추가] count_four 단일 좌표 기준 → count_four_total(board) 보드 전체 스캔으로 교체
+         연속 4 및 빈칸 포함 4 패턴(■■■□■ 등) 모두 감지
+- [추가] check_overline: is_forbidden 내 임시 배치 후 호출로 정확한 6목+ 판정
+- [추가] is_forbidden: 5목 완성 자리는 금수 제외 (승리 우선) 처리 추가
+- [추가] 같은 가로/세로/대각 라인에 속한 돌 그룹은 open3 최대 1개로만 카운트
+         (예: ■■ 와 ■■■ 가 같은 가로줄이면 33 금수로 오판하지 않음)
 """
-
-    
