@@ -16,21 +16,32 @@ class PPOModel(nn.Module):
         # These layers extract spatial features (like lines of 3 or 4 stones)
         self.conv_block = nn.Sequential(
             # First layer: Detects basic patterns (1 input channel -> 64 feature maps)
-            nn.Conv2d(2, 64, kernel_size=3, padding=1),
-            nn.ReLU(),
+            nn.Conv2d(2, 32, kernel_size=3, padding=1),
+            nn.ReLU(), 
             #패턴 찾고, 돌이 있는지 없는지에대한 정보 부각
             # Second layer: Deepens the understanding (64 -> 128 feature maps)
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
             nn.ReLU(),
             
             # Third layer: Solidifies pattern recognition (128 -> 128 feature maps)
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),
-            nn.ReLU()
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.ReLU(),
+
+            nn.AdaptiveAvgPool2d((5,5))
         )
-        
+        # 수정:
+        # feature map 수 축소 (64 -> 32)
+        # 연산량 감소 및 학습 속도 개선
+        # 수정:
+        # feature map 수 축소 (64 -> 32)
+        # 연산량 감소 및 학습 속도 개선
         # Calculate the total number of features after flattening the 2D grid
-        self.flatten_size = 128 * board_size * board_size
-        
+        self.flatten_size = 64 * 5 * 5
+        # 수정:
+        # flatten 크기 변경
+        # 기존: 128 * board_size * board_size
+        # 변경: 64 * 5 * 5
+        # fully connected layer 파라미터 감소
         # --- ACTOR HEAD (The Decision Maker) ---
         # Suggests where to move next by outputting a score for every cell on the board
         self.actor = nn.Sequential(
