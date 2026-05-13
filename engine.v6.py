@@ -269,72 +269,6 @@ class OmokEngine:
         self.board[r, c] = 0  # 돌 제거
         return False
 
-    # def count_four_total(self, tr, tc, player):
-    #     """
-    #     보드 전체에서 (tr, tc)에 돌을 놓았을 때 만들어지는 '4'의 개수를 세는 로직
-    #     '4'의 정의: 돌이 4개이고, 빈 칸에 돌을 놓아 바로 5가 될 수 있는 상태
-    #     """
-    #     four_count = 0
-    #     directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
-
-    #     for dr, dc in directions:
-    #         # 보드 전체 탐색
-    #         visited_lines = set()
-    #         start_r,end_r= tr-7 if tr-7>0 else 0, tr+7 if tr+7<self.board_size else self.board_size
-    #         start_c, end_c=tc-7 if tc-7>0 else 0, tc+7 if tc+7<self.board_size else self.board_size
-    #         for r in range(start_r,end_r):
-    #             for c in range(start_c,end_c):
-    #                 if self.board[r, c] != player:
-    #                     continue
-
-    #                 # 라인 시작점 찾기
-    #                 sr, sc = r, c
-    #                 black_count = 0
-    #                 check_white = False
-
-    #                 while 0 <= sr - dr < self.board_size and 0 <= sc - dc < self.board_size:
-    #                     sr -= dr
-    #                     sc -= dc
-    #                     if self.board[sr, sc] == 2:  # 백돌이 끼면 검사 불필요
-    #                         check_white = True
-    #                     if not check_white and self.board[sr, sc] == 1:
-    #                         black_count += 1
-                    
-    #                 line_key = (sr, sc, dr, dc)
-    #                 if line_key in visited_lines:
-    #                     continue
-    #                 visited_lines.add(line_key)
-
-
-    #                 # 최적화 조건
-    #                 if black_count > 4:   # 이미 5목 이상이면 4목 패턴 불가능
-    #                     continue
-    #                 if check_white:       # 백돌이 끼어 있으면 스킵
-    #                     continue
-
-    #                 # 라인 전체 추출
-    #                 line = []
-    #                 nr, nc = sr, sc
-    #                 while 0 <= nr < self.board_size and 0 <= nc < self.board_size:
-    #                     line.append(self.board[nr, nc])
-    #                     nr += dr
-    #                     nc += dc
-
-    #                 # 4목 패턴 검사
-    #                 line_has_four = False
-    #                 for start in range(len(line) - 4):
-    #                     window = line[start:start + 5]
-    #                     values = list(window)
-
-    #                     # 내 돌이 4개 + 빈칸 1개 → 4목
-    #                     if values.count(player) == 4 and values.count(0) == 1:
-    #                         line_has_four = True
-    #                         break
-
-    #                 if line_has_four:
-    #                     four_count += 1
-
-    #     return four_count
     def count_four_total(self, tr, tc, player):
         """
         보드 전체에서 (tr, tc)에 돌을 놓았을 때 만들어지는 '4'의 개수를 세는 로직
@@ -373,32 +307,25 @@ class OmokEngine:
                         nr += dr
                         nc += dc
 
-                    # 4목 패턴 검사 (열린4/막힌4 모두 포함)
                     for start in range(len(line) - 4):
                         window = line[start:start + 5]
                         values = list(window)
 
-                        # 내 돌이 4개 + 빈칸 1개 → 4목
                         if values.count(player) == 4 and values.count(0) == 1:
-                            four_count += 1
-                            break  # 같은 라인에서 여러 개 겹치면 1개로만 카운트
+                            # 양쪽 끝 좌표 계산
+                            left_idx = start - 1
+                            right_idx = start + 5
+
+                            left_blocked = (left_idx < 0) or (line[left_idx] != 0)
+                            right_blocked = (right_idx >= len(line)) or (line[right_idx] != 0)
+
+                            # 양쪽 다 막힌 경우는 제외
+                            if not (left_blocked and right_blocked):
+                                four_count += 1
+                                break
 
         return four_count
 
-# 4목 패턴 검사
-    #                 line_has_four = False
-    #                 for start in range(len(line) - 4):
-    #                     window = line[start:start + 5]
-    #                     values = list(window)
-
-    #                     # 내 돌이 4개 + 빈칸 1개 → 4목
-    #                     if values.count(player) == 4 and values.count(0) == 1:
-    #                         line_has_four = True
-    #                         break
-
-
-
-    
 """
 33 방지를 위한 forbidden함수, is_open_three함수 추가
 makemove함수 수정
