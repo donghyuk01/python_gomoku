@@ -1,4 +1,5 @@
 import numpy as np
+
 class OmokEngine:
     def __init__(self, board_size=15):
         """
@@ -7,302 +8,491 @@ class OmokEngine:
         """
         self.board_size = board_size
         self.reset()
+
     def reset(self):
         """
         Resets the game state to start a new match.
         Returns the initial empty board state.
         """
-        # Create a 2D array filled with zeros
-        # (0 = empty, 1 = Player 1, 2 = Player 2)
+        # Create a 2D array filled with zeros (0 = empty, 1 = Player 1, 2 = Player 2)
         self.board = np.zeros((self.board_size, self.board_size), dtype=int)
-        self.current_player = 1
+        self.current_player = 1 
         self.is_over = False
         self.winner = None
         return self.get_state()
+
     def get_state(self):
-        """
-        Converts the board into a format suitable for the Neural Network (CNN).
-        Returns a 3D float32 tensor.
-        """
         state = np.zeros((2, self.board_size, self.board_size), dtype=np.float32)
-        # 수정
-        # 현재 플레이어 기준으로 상태 생성
-        # state[0] = 내 돌
-        # state[1] = 상대 돌
+        # 0번 채널: 현재 턴인 플레이어의 돌 위치 (나)
         state[0] = (self.board == self.current_player).astype(np.float32)
+        # 1번 채널: 상대방 플레이어의 돌 위치 (적)
         state[1] = (self.board == (3 - self.current_player)).astype(np.float32)
         return state
+
     def get_valid_moves(self):
         """
         Finds all empty cells where a move is allowed.
         Returns an array of [row, col] coordinates.
         """
-        valid_moves = set()
-        # 첫 수는 중앙만 허용
-        if np.count_nonzero(self.board) == 0:
-            center = self.board_size // 2
-            return np.array([[center, center]])
-        # 현재 돌 위치들 찾기
-        stones = np.argwhere(self.board != 0)
-        # 수정
-        # 전체 보드를 다 검사하지 않고
-        # 돌 주변 2칸만 후보로 탐색
-        # 속도 엄청 빨라짐
-        for r, c in stones:
-            for dr in range(-2, 3):
-                for dc in range(-2, 3):
-                    nr = r + dr
-                    nc = c + dc
-                    # 보드 범위 체크
-                    if (0 <= nr < self.board_size and 0 <= nc < self.board_size):
-                        # 빈칸만 가능
-                        if self.board[nr, nc] == 0:
-                            # 수정
-                            # 금수 자리 제외
-                            if not self.forbidden(nr, nc, self.current_player):
-                                valid_moves.add((nr, nc))
-        return np.array(list(valid_moves))
+        # 수정 금수 자리를 아예 선택하지 못하도록 제외
+        all_empty = np.argwhere(self.board==0)
+        valid_moves = []
+
+        for r,c in all_empty:
+            if not self.forbidden(r,c,self.current_player):
+                valid_moves.append([r,c])
+        return np.array(valid_moves)
+
     def make_move(self, row, col):
         """
         Executes a move for the current player.
         :param row: Row index to place the stone.
         :param col: Column index to place the stone.
-        :return:
-        True if move was successful,
-        False if invalid.
+        :return: True if move was successful, False if invalid.
         돌을 둘 수 있는 자리인지
         돌 배치
-        이겼는지 비겼는지
+        이겼는지 비겻는지
         다음 차례로 가기
         """
-        print("현재 플레이어:", self.current_player)
-        # 1. 기본적인 유효성 검사
-        # (범위 밖, 이미 돌 있음, 게임 종료됨)
+        
+        # 1. 기본적인 유효성 검사 (범위 밖, 이미 돌이 있음, 게임 종료됨)
         if not (0 <= row < self.board_size and 0 <= col < self.board_size):
             return False
-        if self.board[row, col] != 0:
+        if self.board[row, col] != 0 or self.is_over:
             return False
-        if self.is_over:
-            return False
-        # 2. 흑돌(1)만 금수 검사
+        
+        # 2. 흑돌(1)일 때만 금수 규칙(3-3 등)을 체크
         if self.current_player == 1:
             if self.forbidden(row, col, 1):
-                # print(f"Forbidden move at ({row}, {col})")
+                # print(f"Forbidden move for Black at ({row}, {col})")
                 return False
+
         # 3. 돌 배치
         self.board[row, col] = self.current_player
+        
         # 4. 승리 판정
         if self.check_win(row, col):
             self.is_over = True
             self.winner = self.current_player
-        # 5. 무승부 판정
-        elif not np.any(self.board == 0):
+        # 5. 무승부 판정 (빈 공간이 없음)
+        elif not np.any(self.board == 0):   
             self.is_over = True
-            self.winner = 0
-        # 6. 턴 교체
-        # 1 -> 2
-        # 2 -> 1
+            self.winner = 0 
+            
+        # 6. 턴 교체 (1->2, 2->1)
         self.current_player = 3 - self.current_player
         return True
+
     def check_win(self, r, c):
         """
-        Checks if the last move placed at (r, c)
-        created a line of 5 or more.
-        """
+        Checks if the last move placed at (r, c) created a line of 5 or more.
+        
+        """ 
         player = self.board[r, c]
-        # Directions:
-        # Horizontal
-        # Vertical
-        # Diagonal (\)
-        # Anti-diagonal (/)
-        directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
+        # Directions: Horizontal, Vertical, Diagonal (\), Anti-diagonal (/)
+        directions = [(0, 1), (1, 0), (1, 1), (1, -1)] #순서대로 가로 세로 우하향 우상향
+        
         for dr, dc in directions:
             count = 1
-            # 양방향 검사
-            # ex) 좌우 / 상하
+            # Check in both directions along the line (e.g., Left and Right)
             for sign in [1, -1]:
-                nr = r + dr * sign
-                nc = c + dc * sign
-                while (0 <= nr < self.board_size and 0 <= nc < self.board_size and self.board[nr, nc] == player):
+                nr, nc = r + dr * sign, c + dc * sign
+                # Stay within board boundaries and match player stone
+                while 0 <= nr < self.board_size and 0 <= nc < self.board_size and self.board[nr, nc] == player:
                     count += 1
                     nr += dr * sign
                     nc += dc * sign
-            # 수정
-            # 흑은 정확히 5목만 승리
-            if player == 1:
-                if count == 5:
-                    return True
-            # 백은 6목 이상 허용
-            else:
-                if count >= 5:
-                    return True
+            
+            # If 5 or more in a row are found, the player wins
+            if count >= 5: return True # 5개 이상
         return False
+
     def check_patterns(self, player, length):
         """
-        Scans the entire board to find a sequence
-        of stones of a specific length.
-        Used for Reward Shaping.
+        Scans the entire board to find a sequence of stones of a specific 'length'.
+        Used for Reward Shaping (e.g., giving the AI points for creating a 3-in-a-row).
         """
+        # Directions: Horizontal, Vertical, Diagonal, Anti-diagonal
         directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
+        
         for r in range(self.board_size):
             for c in range(self.board_size):
-                # 해당 플레이어 돌만 검사
+                # If the cell belongs to the player we are checking
                 if self.board[r, c] == player:
                     for dr, dc in directions:
                         count = 1
-                        nr = r + dr
-                        nc = c + dc
-                        # 연속된 돌 탐색
-                        while (0 <= nr < self.board_size and 0 <= nc < self.board_size and self.board[nr, nc] == player):
+                        nr, nc = r + dr, c + dc
+                        
+                        # Trace the line in the current direction
+                        while 0 <= nr < self.board_size and 0 <= nc < self.board_size and self.board[nr, nc] == player:
                             count += 1
                             nr += dr
                             nc += dc
-                        # 정확한 길이 발견
+                        
+                        # If a sequence of the exact length is found
                         if count == length:
                             return True
         return False
+    
     def count_in_direction(self, r, c, dr, dc, player):
-        """
-        한 방향으로 연속된 돌 개수 측정
-        """
+        # 길이 측정
         count = 0
-        nr = r + dr
-        nc = c + dc
-        while (0 <= nr < self.board_size and 0 <= nc < self.board_size and self.board[nr, nc] == player):
+        nr, nc = r + dr, c + dc
+        while 0 <= nr < self.board_size and 0 <= nc < self.board_size and self.board[nr, nc] == player:
             count += 1
             nr += dr
             nc += dc
+            # print(f"찾은 count={count}")
         return count
+    
+
     def check_overline(self, r, c, player):
-        """
-        6목 금지 검사
-        """
-        directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
+    # 6목 금지 
+        directions = [(1,0),(0,1),(1,1),(1,-1)]
         for dr, dc in directions:
             count = 1
-            count += self.count_in_direction(r, c, dr, dc, player)
+            count += self.count_in_direction(r, c,  dr,  dc, player)
             count += self.count_in_direction(r, c, -dr, -dc, player)
-            # 6목 이상
             if count >= 6:
                 return True
         return False
+
+    def get_line_key(self, r, c, dr, dc):
+        """(r,c)를 포함하는 (dr,dc) 방향 라인의 시작 좌표 반환 (0-based)."""
+        sr, sc = r, c
+        while 0 <= sr - dr < self.board_size and 0 <= sc - dc < self.board_size:
+            sr -= dr
+            sc -= dc
+        return (sr, sc, dr, dc)
+
+    def collect_chain(self, r, c, dr, dc, player):
+        """
+        (r,c)에서 (dr,dc) 방향으로 돌 연결을 수집.
+        빈칸 한 개까지 건너뛰기 허용.
+        반환: 연결된 좌표 리스트 (자기 자신 제외)
+        """
+        coords = []
+        found_skip = False
+        nr, nc = r + dr, c + dc
+
+        while 0 <= nr < self.board_size and 0 <= nc < self.board_size:
+            if self.board[nr][nc] == player:
+                coords.append((nr, nc))
+            elif self.board[nr][nc] == 0:
+                if not found_skip:
+                    nnr, nnc = nr + dr, nc + dc
+                    if (0 <= nnr < self.board_size and 0 <= nnc < self.board_size
+                            and self.board[nnr][nnc] == player):
+                        found_skip = True
+                    else:
+                        break
+                else:
+                    break
+            else:
+                break
+            nr += dr
+            nc += dc
+        return coords
+
+    def get_line_length(self, r, c, dr, dc, player):
+        """(r,c)에서 (dr,dc) 방향 양쪽으로 연속된 돌 총 길이 반환."""
+        return (1
+                + self.count_in_direction(r, c, dr, dc, player)
+                + self.count_in_direction(r, c, -dr, -dc, player))
+
+    def count_open3_total(self, r, c, player, visited=None):
+        """
+        (r,c)를 포함하는 열린3 개수를 반환.
+        """
+        if visited is None:
+            visited = {'stones': set(), 'lines': set()}
+
+        visited['stones'].add((r, c))
+        directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
+        open3_count = 0
+
+        for dr, dc in directions:
+            lkey = self.get_line_key(r, c, dr, dc)
+            dir_key = (dr, dc, lkey)
+
+            if dir_key in visited['lines']:
+                continue
+
+            if self.get_line_length(r, c, dr, dc, player) >= 6:
+                visited['lines'].add(dir_key)
+                continue
+
+            chain_fwd = self.collect_chain(r, c, dr, dc, player)
+            chain_bwd = self.collect_chain(r, c, -dr, -dc, player)
+            chain = list(set(chain_fwd + chain_bwd + [(r, c)]))
+            chain.sort()
+
+            if len(chain) == 3:
+                sr, sc = chain[0]
+                er, ec = chain[-1]
+
+                is_really_three = True
+                for ex_dr, ex_dc, corner in [(-dr, -dc, (sr, sc)), (dr, dc, (er, ec))]:
+                    cx, cy = corner[0] + ex_dr, corner[1] + ex_dc
+                    if (0 <= cx < self.board_size and 0 <= cy < self.board_size
+                            and self.board[cx][cy] == player):
+                        is_really_three = False
+                        break
+
+                if is_really_three:
+                    e1r, e1c = sr - dr, sc - dc
+                    e2r, e2c = er + dr, ec + dc
+                    open1 = (0 <= e1r < self.board_size and 0 <= e1c < self.board_size
+                            and self.board[e1r][e1c] == 0)
+                    open2 = (0 <= e2r < self.board_size and 0 <= e2c < self.board_size
+                            and self.board[e2r][e2c] == 0)
+
+                    if open1 and open2:
+                        visited['lines'].add(dir_key)
+                        open3_count += 1
+
+            for pr, pc in chain:
+                if (pr, pc) != (r, c) and (pr, pc) not in visited['stones']:
+                    peer_lkey = self.get_line_key(pr, pc, dr, dc)
+                    visited['lines'].add((dr, dc, peer_lkey))
+                    open3_count += self.count_open3_total(pr, pc, player, visited)
+
+        return open3_count
+
     def forbidden(self, r, c, player):
-        """
-        금수 판정
-        1. 33 금지
-        2. 44 금지
-        3. 6목 금지
-        """
-        # 백은 금수 없음
         if player != 1:
             return False
-        # 임시 돌 배치
-        self.board[r, c] = player
-        # 수정
-        # 5목 완성은 금수 아님
+
+        self.board[r, c] = player  # 임시로 돌 배치
+
+        # 5목이 되는 자리는 금수 아님
         if self.check_win(r, c):
             self.board[r, c] = 0
             return False
-        # 주변만 검사
-        # 전체 보드 검사보다 훨씬 빠름
-        open3_count = self.count_open3_local(r, c, player)
-        four_count = self.count_four_local(r, c, player)
+
+        # 보드 전체 기준으로 패턴 카운트
+        open3_count = self.count_open3_total(r,c,player)
+        if open3_count >= 2:   
+            self.board[r, c] = 0  # 돌 제거
+            return True
+        four_count  = self.count_four_total(r,c,player)
+        if four_count  >= 2:   
+            self.board[r, c] = 0  # 돌 제거
+            return True
         is_overline = self.check_overline(r, c, player)
-        # 원상복구
-        self.board[r, c] = 0
-        # 6목 금지
-        if is_overline:
+        if is_overline:        
+            self.board[r, c] = 0  # 돌 제거
             return True
-        # 33 금지
-        if open3_count >= 2:
-            return True
-        # 44 금지
-        if four_count >= 2:
-            return True
+        self.board[r, c] = 0  # 돌 제거
         return False
-    def count_open3_local(self, r, c, player):
+
+    def count_open_total(self, tr, tc, player):
         """
-        현재 착수 위치 주변만 검사해서
-        열린 3 개수 계산
+        보드 전체에서 (tr, tc)에 돌을 놓았을 때 만들어지는 '4'의 개수를 세는 로직
+        '4'의 정의: 돌이 4개이고, 빈 칸 하나를 채우면 바로 5목이 되는 상태
+        열린4/막힌4 모두 포함
         """
+        four_count = 0
         directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
-        P = player
-        E = 0
-        # 열린 3 패턴들
-        patterns = [[E, P, P, P, E], [E, P, P, E, P, E], [E, P, E, P, P, E]]
-        total = 0
+
         for dr, dc in directions:
-            line = []
-            # 중심 기준 4칸씩만 검사
-            for i in range(-4, 5):
-                nr = r + dr * i
-                nc = c + dc * i
-                if (0 <= nr < self.board_size and 0 <= nc < self.board_size):
-                    line.append(self.board[nr, nc])
-                else:
-                    line.append(-1)
-            found = False
-            # 패턴 검사
-            for pat in patterns:
-                plen = len(pat)
-                for start in range(len(line) - plen + 1):
-                    window = line[start:start + plen]
-                    if window == pat:
-                        total += 1
-                        found = True
+            visited_lines = set()
+            start_r,end_r= tr-7 if tr-7>0 else 0, tr+7 if tr+7<self.board_size else self.board_size
+            start_c,end_c=tc-7 if tc-7>0 else 0, tc+7 if tc+7<self.board_size else self.board_size
+
+            for r in range(start_r,end_r):
+                for c in range(start_c,end_c):
+                    if self.board[r, c] != player:
+                        continue
+
+                    # 라인 시작점 찾기
+                    sr, sc = r, c
+                    while 0 <= sr - dr < self.board_size and 0 <= sc - dc < self.board_size:
+                        sr -= dr
+                        sc -= dc
+
+                    line_key = (sr, sc, dr, dc)
+                    if line_key in visited_lines:
+                        continue
+                    visited_lines.add(line_key)
+
+                    # 라인 전체 추출
+                    line = []
+                    nr, nc = sr, sc
+                    while 0 <= nr < self.board_size and 0 <= nc < self.board_size:
+                        line.append(self.board[nr, nc])
+                        nr += dr
+                        nc += dc
+
+                    for start in range(len(line) - 4):
+                        window = line[start:start + 5]
+                        values = list(window)
+
+                        if values.count(player) == 4 and values.count(0) == 1:
+                            # 양쪽 끝 좌표 계산
+                            left_idx = start - 1
+                            right_idx = start + 5
+
+                            left_blocked = (left_idx < 0) or (line[left_idx] != 0)
+                            right_blocked = (right_idx >= len(line)) or (line[right_idx] != 0)
+
+                            # 양쪽 다 막힌 경우는 제외
+                            if not (left_blocked and right_blocked):
+                                four_count += 1
+                                break
+
+        return four_count
+    def count_four_total(self, r, c, player, visited=None):
+        """
+        (r,c)를 포함하는 '4' 패턴 개수를 반환.
+        '4' 정의: 돌이 4개이고, 빈칸 하나를 채우면 바로 5목이 되는 상태
+        열린4/막힌4 모두 포함 (양쪽 다 막힌 경우 제외)
+        """
+        if visited is None:
+            visited = {'stones': set(), 'lines': set()}
+
+        visited['stones'].add((r, c))
+        directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
+        four_count = 0
+
+        for dr, dc in directions:
+            lkey = self.get_line_key(r, c, dr, dc)
+            dir_key = (dr, dc, lkey)
+
+            if dir_key in visited['lines']:
+                continue
+
+            if self.get_line_length(r, c, dr, dc, player) >= 6:
+                visited['lines'].add(dir_key)
+                continue
+            
+            chain_fwd = self.collect_chain(r, c, dr, dc, player)
+            chain_bwd = self.collect_chain(r, c, -dr, -dc, player)
+            chain = list(set(chain_fwd + chain_bwd + [(r, c)]))
+            chain.sort()
+
+            if len(chain) == 4:
+                sr, sc = chain[0]
+                er, ec = chain[-1]
+
+                is_really_four = True
+                for ex_dr, ex_dc, corner in [(-dr, -dc, (sr, sc)), (dr, dc, (er, ec))]:
+                    cx, cy = corner[0] + ex_dr, corner[1] + ex_dc
+                    if (0 <= cx < self.board_size and 0 <= cy < self.board_size
+                            and self.board[cx][cy] == player):
+                        is_really_four = False
                         break
-                if found:
-                    break
-        return total
-    def count_four_local(self, r, c, player):
+
+                if is_really_four:
+                    e1r, e1c = sr - dr, sc - dc
+                    e2r, e2c = er + dr, ec + dc
+                    open1 = (0 <= e1r < self.board_size and 0 <= e1c < self.board_size
+                            and self.board[e1r][e1c] == 0)
+                    open2 = (0 <= e2r < self.board_size and 0 <= e2c < self.board_size
+                            and self.board[e2r][e2c] == 0)
+
+                    if open1 or open2:
+                        visited['lines'].add(dir_key)
+                        four_count += 1
+
+            for pr, pc in chain:
+                if (pr, pc) != (r, c) and (pr, pc) not in visited['stones']:
+                    peer_lkey = self.get_line_key(pr, pc, dr, dc)
+                    visited['lines'].add((dr, dc, peer_lkey))
+                    four_count += self.count_four_total(pr, pc, player, visited)
+
+        return four_count
+    
+    def count_open_four(self, player):
         """
-        현재 착수 위치 주변만 검사해서
-        4 패턴 개수 계산
+        보드 전체에서 특정 플레이어의 '살아있는 4'의 개수를 세는 함수.
+        좌표 인자 없이 플레이어 번호만으로 보드 전체를 감시합니다.
         """
+        four_count = 0
         directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
-        P = player
-        E = 0
-        # 4 패턴들
-        patterns = [[E, P, P, P, P, E], [P, P, P, E, P], [P, P, E, P, P], [P, E, P, P, P]]
-        total = 0
-        for dr, dc in directions:
-            line = []
-            # 중심 기준 5칸씩만 검사
-            for i in range(-5, 6):
-                nr = r + dr * i
-                nc = c + dc * i
-                if (0 <= nr < self.board_size and 0 <= nc < self.board_size):
-                    line.append(self.board[nr, nc])
-                else:
-                    line.append(-1)
-            found = False
-            # 패턴 검사
-            for pat in patterns:
-                plen = len(pat)
-                for start in range(len(line) - plen + 1):
-                    window = line[start:start + plen]
-                    if window == pat:
-                        total += 1
-                        found = True
-                        break
-                if found:
-                    break
-        return total
+        visited_lines = set()
+
+        for r in range(self.board_size):
+            for c in range(self.board_size):
+                if self.board[r, c] != player:
+                    continue
+                for dr, dc in directions:
+                    # 라인 시작점 찾기 (중복 계산 방지)
+                    sr, sc = r, c
+                    while 0 <= sr - dr < self.board_size and 0 <= sc - dc < self.board_size:
+                        sr -= dr
+                        sc -= dc
+                    
+                    line_key = (sr, sc, dr, dc)
+                    if line_key in visited_lines: continue
+                    visited_lines.add(line_key)
+
+                    # 라인 데이터 추출
+                    line = []
+                    nr, nc = sr, sc
+                    while 0 <= nr < self.board_size and 0 <= nc < self.board_size:
+                        line.append(self.board[nr, nc])
+                        nr += dr
+                        nc += dc
+
+                    # 5칸 윈도우로 4목 패턴 매칭
+                    for start in range(len(line) - 4):
+                        window = line[start : start + 5]
+                        if list(window).count(player) == 4 and list(window).count(0) == 1:
+                            left_idx, right_idx = start - 1, start + 5
+                            left_open = (left_idx >= 0 and line[left_idx] == 0)
+                            right_open = (right_idx < len(line) and line[right_idx] == 0)
+                            
+                            # 한쪽이라도 열려있으면 위협으로 간주
+                            if left_open or right_open:
+                                four_count += 1
+                                break 
+        return four_count
+    def count_open_three(self, player):
+        """
+        보드 전체에서 특정 플레이어의 '열린 3'의 개수를 세는 함수.
+        5칸 윈도우 [0, P, P, P, 0] 패턴을 정확히 찾아냅니다.
+        """
+        three_count = 0
+        directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
+        visited_lines = set()
+        
+        for r in range(self.board_size):
+            for c in range(self.board_size):
+                if self.board[r, c] != player: 
+                    continue
+                    
+                for dr, dc in directions:
+                    # 1. get_line_key의 리턴값 4개를 모두 받아줌으로써 ValueError 방지
+                    sr, sc, ddr, ddc = self.get_line_key(r, c, dr, dc)
+                    
+                    line_key = (sr, sc, dr, dc)
+                    if line_key in visited_lines: 
+                        continue
+                    visited_lines.add(line_key)
+                    
+                    # 2. 라인 데이터 추출
+                    line = []
+                    nr, nc = sr, sc
+                    while 0 <= nr < self.board_size and 0 <= nc < self.board_size:
+                        line.append(self.board[nr, nc])
+                        nr += dr
+                        nc += dc
+                    
+                    # 3. 5칸 윈도우로 열린 3 [0, player, player, player, 0] 매칭
+                    if len(line) < 5:
+                        continue
+                        
+                    for start in range(len(line) - 4):
+                        window = list(line[start : start + 5])
+                        # 양 끝이 비어있고 내부 3개가 플레이어 돌인 경우
+                        if window == [0, player, player, player, 0]:
+                            three_count += 1
+                            
+        return three_count
 """
-수정 사항
-1. get_valid_moves 최적화
-- 전체 보드 검사 제거
-- 돌 주변 2칸만 후보 생성
-2. forbidden 최적화
-- 전체 보드 스캔 제거
-- 착수 위치 주변만 검사
-3. count_open3_total 제거
-- count_open3_local 사용
-4. count_four_total 제거
-- count_four_local 사용
-5. 속도 개선
-- 기존 대비 수십 배 빨라짐
-6. 흑/백 승리 규칙 수정
-- 흑: 정확히 5목
-- 백: 5목 이상 허용
+33 방지를 위한 forbidden함수, is_open_three함수 추가
+makemove함수 수정
+is_open_three 함수 수정(연속된 돌만 감지가능 했음)
+count_open3_total 속도 향상 05-12 17:02
 """
