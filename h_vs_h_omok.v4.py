@@ -377,15 +377,39 @@ for z in range(1, Board_Size_Actual + 1):
 B = Button(myInterface, text="EXIT", font="Helvetica 10 bold", command=Exit, bg="gray")
 B.place(x=width*0.25, y=height-40, height=30, width=80)
 
+# 외곽선 그리기
 s.create_rectangle(Board_X1-Frame_Gap, Board_Y1-Frame_Gap, 
                    Board_X1+(Board_Size_Actual-1)*Board_GapX+Frame_Gap, 
                    Board_Y1+(Board_Size_Actual-1)*Board_GapY+Frame_Gap, width=3)
 
+# 바둑판 그리드 선 및 좌표 텍스트 그리기
 for f in range(Board_Size_Actual):
     s.create_line(Board_X1, Board_Y1 + f * Board_GapY, Board_X1 + (Board_Size_Actual-1) * Board_GapX, Board_Y1 + f * Board_GapY)
     s.create_line(Board_X1 + f * Board_GapX, Board_Y1, Board_X1 + f * Board_GapX, Board_Y1 + (Board_Size_Actual-1) * Board_GapY)
     s.create_text(Board_X1 - 25, Board_Y1 + f * Board_GapY, text=f+1, font="Helvetica 10")
     s.create_text(Board_X1 + f * Board_GapX, Board_Y1 - 25, text=f+1, font="Helvetica 10")
+
+# [추가] 화점(굵은 점)을 그리는 함수 및 실행 코드
+def draw_star_points():
+    # 15x15 바둑판의 표준 화점 위치 (1-based coordinate)
+    # 이미지에 표시된 4, 8, 12 라인의 교차점들입니다.
+    star_positions = [4, 8, 12]
+    
+    # 화점의 반지름 설정 (기존 바둑돌 크기보다 작게 설정)
+    star_radius = 4 
+    
+    for sx in star_positions:
+        for sy in star_positions:
+            # 화점이 그려질 실제 Canvas 중심 좌표 계산
+            cx = Board_X1 + Board_GapX * (sx - 1)
+            cy = Board_Y1 + Board_GapY * (sy - 1)
+            
+            # 굵은 검은색 점(화점) 생성
+            s.create_oval(cx - star_radius, cy - star_radius, 
+                          cx + star_radius, cy + star_radius, 
+                          fill="black", outline="black")
+# 화점 그리기 실행
+draw_star_points()
 
 Turn_Text = Score_Board()
 
